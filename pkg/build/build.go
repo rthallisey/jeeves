@@ -6,6 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
+	"strings"
 )
 
 type YamlData struct {
@@ -23,6 +25,8 @@ func NewYamlData() *YamlData {
 
 func (data *YamlData) BuildContainer() {
 	data.ReadYaml()
+	data.SetupBuildir()
+	data.RenderDockerfile()
 	data.Build()
 }
 
@@ -37,7 +41,7 @@ func (data *YamlData) ReadYaml() {
 	}
 }
 
-func (data *YamlData) Build() {
+func (data *YamlData) SetupBuildir() {
 	// Need scipt basename
 	dest_dir := "buildir/" + data.Name
 	err := os.MkdirAll(dest_dir, 0777)
@@ -56,7 +60,7 @@ func CopyFile(src string, dst string) {
 		fmt.Println(sf)
 	}
 	fmt.Println(dst)
-	df, err := os.Create(dst)
+	df, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0766)
 	if err != nil {
 		fmt.Println(df)
 	}
@@ -69,4 +73,42 @@ func CopyFile(src string, dst string) {
 		fmt.Println("Copy error")
 	}
 	fmt.Println(b)
+}
+
+func (data *YamlData) RenderDockerfile() {
+	input, err := ioutil.ReadFile("examples/dockerfiles/" + data.Container)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	lines := strings.Split(string(input), "\n")
+
+	for i, line := range lines {
+		if strings.Contains(line, "{{SCRIPT}}") {
+			lines[i] = "COPY " + data.Script + " ."
+		}
+		if strings.Contains(line, "{{COMMAND}}") {
+			lines[i] = "CMD ['./" + data.Script + "']"
+		}
+	}
+	output := strings.Join(lines, "\n")
+	dst, err := os.Create("buildir/" + data.Name + "/Dockerfile")
+	fmt.Println(dst)
+
+	err = ioutil.WriteFile("buildir/"+data.Name+"/Dockerfile", []byte(output), 0644)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (data *YamlData) Build() {
+	// Docker build
+	cmdName := "docker"
+	cmdArgs := []string{"build", "-t", data.Container + "-" + data.Name, "buildir" + data.Name}
+
+	cmdOut, err := exec.Command(cmdName, cmdArgs...).Output()
+	if err != nil {
+		fmt.Println(os.Stderr, "Error", err)
+	}
+	fmt.Println(string(cmdOut))
 }

@@ -1,4 +1,6 @@
 FROM centos:latest
 MAINTAINER Ryan Hallisey
 
+{{SCRIPT}}
+
 {{COMMAND}}
