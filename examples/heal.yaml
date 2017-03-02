@@ -1,0 +1,6 @@
+name: jeeves
+app: mariadb
+template: basic
+container: basic
+script: heal.sh
+when: heal
