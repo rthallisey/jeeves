@@ -21,7 +21,7 @@ import (
 )
 
 func Run() *int {
-	job := build.NewYamlData()
+	job := build.NewBuild()
 
 	for {
 		fmt.Println("building image")

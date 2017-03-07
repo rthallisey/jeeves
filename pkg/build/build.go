@@ -2,81 +2,61 @@ package build
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/jeeves/pkg/yamlData"
 )
 
-type YamlData struct {
-	Name      string `yaml:"name"`
-	App       string `yaml:"app"`
-	Template  string `yaml:"template"`
-	Container string `yaml:"container"`
-	Script    string `yaml:"script"`
-	When      string `yaml:"when"`
+type Build struct {
+	data *yamlData.YamlData
 }
 
-func NewYamlData() *YamlData {
-	return &YamlData{}
+func NewBuild() *Build {
+	d := yamlData.NewYamlData()
+	return &Build{data: d}
 }
 
-func (data *YamlData) BuildContainer() {
-	data.ReadYaml()
-	data.SetupBuildir()
-	data.RenderDockerfile()
-	data.Build()
+func (build Build) BuildContainer() {
+	build.data.ReadYaml()
+	build.SetupBuildir()
+	build.RenderDockerfile()
+	build.DockerBuild()
 }
 
-func (data *YamlData) ReadYaml() {
-	yamlFile, err := ioutil.ReadFile("/home/rhallisey/src/github.com/jeeves/examples/heal.yaml")
-	if err != nil {
-		fmt.Println("yamlFile.Get error: #%v ", err)
-	}
-	err = yaml.Unmarshal(yamlFile, data)
-	if err != nil {
-		fmt.Println("Unmarshal: %v", err)
-	}
-}
-
-func (data *YamlData) SetupBuildir() {
-	// Need scipt basename
-	dest_dir := "buildir/" + data.Name
+func (build Build) SetupBuildir() {
+	// Need script basename
+	dest_dir := "buildir/" + build.data.Name
 	err := os.MkdirAll(dest_dir, 0777)
 	if err != nil {
 		fmt.Println(err)
 	}
-	dest := dest_dir + "/" + data.Script
-	CopyFile("examples/"+data.Script, dest)
+	dest := dest_dir + "/" + build.data.Script
+	build.CopyFile("examples/"+build.data.Script, dest)
 
 }
 
-func CopyFile(src string, dst string) {
+func (build Build) CopyFile(src string, dst string) {
 	// Need some serious error checking
 	sf, err := os.OpenFile(src, os.O_RDWR, 0644)
 	if err != nil {
 		fmt.Println(sf)
 	}
-	fmt.Println(dst)
 	df, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0766)
 	if err != nil {
 		fmt.Println(df)
 	}
-	fmt.Println("copy")
-	fmt.Println(sf)
-	fmt.Println(df)
-	var b int64
-	if b, err = io.Copy(df, sf); err != nil {
+	if _, err = io.Copy(df, sf); err != nil {
 		fmt.Println(err)
 		fmt.Println("Copy error")
 	}
-	fmt.Println(b)
 }
 
-func (data *YamlData) RenderDockerfile() {
-	input, err := ioutil.ReadFile("examples/dockerfiles/" + data.Container)
+func (build Build) RenderDockerfile() {
+	input, err := ioutil.ReadFile("examples/dockerfiles/" + build.data.Container)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -85,26 +65,26 @@ func (data *YamlData) RenderDockerfile() {
 
 	for i, line := range lines {
 		if strings.Contains(line, "{{SCRIPT}}") {
-			lines[i] = "COPY " + data.Script + " ."
+			lines[i] = "COPY " + build.data.Script + " ."
 		}
 		if strings.Contains(line, "{{COMMAND}}") {
-			lines[i] = "CMD ['./" + data.Script + "']"
+			lines[i] = "CMD ['./" + build.data.Script + "']"
 		}
 	}
 	output := strings.Join(lines, "\n")
-	dst, err := os.Create("buildir/" + data.Name + "/Dockerfile")
+	dst, err := os.Create("buildir/" + build.data.Name + "/Dockerfile")
 	fmt.Println(dst)
 
-	err = ioutil.WriteFile("buildir/"+data.Name+"/Dockerfile", []byte(output), 0644)
+	err = ioutil.WriteFile("buildir/"+build.data.Name+"/Dockerfile", []byte(output), 0644)
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func (data *YamlData) Build() {
+func (build Build) DockerBuild() {
 	// Docker build
 	cmdName := "docker"
-	cmdArgs := []string{"build", "-t", data.Container + "-" + data.Name, "buildir" + data.Name}
+	cmdArgs := []string{"build", "-t", build.data.Container + "-" + build.data.Name, "buildir" + build.data.Name}
 
 	cmdOut, err := exec.Command(cmdName, cmdArgs...).Output()
 	if err != nil {
