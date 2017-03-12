@@ -1,94 +1,56 @@
 package build
 
 import (
+	"archive/tar"
+	"bytes"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
-	"os/exec"
-	"strings"
+	"time"
 
-	"github.com/jeeves/pkg/yamlData"
+	"github.com/fsouza/go-dockerclient"
 )
 
-type Build struct {
-	data *yamlData.YamlData
+func DockerClient() (*docker.Client, error) {
+	endpoint := "unix:///var/run/docker.sock"
+	return docker.NewClient(endpoint)
 }
 
-func NewBuild() *Build {
-	d := yamlData.NewYamlData()
-	return &Build{data: d}
-}
-
-func (build Build) BuildContainer() {
-	build.data.ReadYaml()
-	build.SetupBuildir()
-	build.RenderDockerfile()
-	build.DockerBuild()
-}
-
-func (build Build) SetupBuildir() {
-	// Need script basename
-	dest_dir := "buildir/" + build.data.Name
-	err := os.MkdirAll(dest_dir, 0777)
-	if err != nil {
-		fmt.Println(err)
+func DockerBuild(client *docker.Client) {
+	t := time.Now()
+	inputbuf, outputbuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
+	tr := tar.NewWriter(inputbuf)
+	tr.WriteHeader(&tar.Header{Name: "Dockerfile", Size: 10, ModTime: t, AccessTime: t, ChangeTime: t})
+	tr.Write([]byte("FROM base\n"))
+	tr.Close()
+	opts := docker.BuildImageOptions{
+		Name: "test-jeeves",
+		//		InputStream:  inputbuf,
+		OutputStream: outputbuf,
+		ContextDir:   "buildir/jeeves",
 	}
-	dest := dest_dir + "/" + build.data.Script
-	build.CopyFile("examples/"+build.data.Script, dest)
 
-}
-
-func (build Build) CopyFile(src string, dst string) {
-	// Need some serious error checking
-	sf, err := os.OpenFile(src, os.O_RDWR, 0644)
-	if err != nil {
-		fmt.Println(sf)
-	}
-	df, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0766)
-	if err != nil {
-		fmt.Println(df)
-	}
-	if _, err = io.Copy(df, sf); err != nil {
-		fmt.Println(err)
-		fmt.Println("Copy error")
-	}
-}
-
-func (build Build) RenderDockerfile() {
-	input, err := ioutil.ReadFile("examples/dockerfiles/" + build.data.Container)
+	err := client.BuildImage(opts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	lines := strings.Split(string(input), "\n")
-
-	for i, line := range lines {
-		if strings.Contains(line, "{{SCRIPT}}") {
-			lines[i] = "COPY " + build.data.Script + " ."
-		}
-		if strings.Contains(line, "{{COMMAND}}") {
-			lines[i] = "CMD ['./" + build.data.Script + "']"
-		}
+	hostConfig := docker.HostConfig{}
+	createOpts := docker.CreateContainerOptions{
+		Config: &docker.Config{
+			Image: "test-jeeves",
+		},
+		HostConfig: &hostConfig,
 	}
-	output := strings.Join(lines, "\n")
-	dst, err := os.Create("buildir/" + build.data.Name + "/Dockerfile")
-	fmt.Println(dst)
+	DockerRun(client, hostConfig, createOpts)
 
-	err = ioutil.WriteFile("buildir/"+build.data.Name+"/Dockerfile", []byte(output), 0644)
+}
+
+func DockerRun(client *docker.Client, hostConfig docker.HostConfig, opts docker.CreateContainerOptions) {
+	container, err := client.CreateContainer(opts)
 	if err != nil {
 		fmt.Println(err)
 	}
-}
-
-func (build Build) DockerBuild() {
-	// Docker build
-	cmdName := "docker"
-	cmdArgs := []string{"build", "-t", build.data.Container + "-" + build.data.Name, "buildir" + build.data.Name}
-
-	cmdOut, err := exec.Command(cmdName, cmdArgs...).Output()
+	err = client.StartContainer(container.ID, &hostConfig)
 	if err != nil {
-		fmt.Println(os.Stderr, "Error", err)
+		fmt.Println(err)
 	}
-	fmt.Println(string(cmdOut))
 }

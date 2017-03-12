@@ -15,13 +15,8 @@ type YamlData struct {
 	When      string `yaml:"when"`
 }
 
-func NewYamlData() *YamlData {
-	return &YamlData{}
-}
-
-// Handle user input to a file location
-func (data *YamlData) ReadYaml() {
-	yamlFile, err := ioutil.ReadFile("/home/rhallisey/src/github.com/jeeves/examples/heal.yaml")
+func ReadYaml(f string, data *YamlData) {
+	yamlFile, err := ioutil.ReadFile(f)
 	if err != nil {
 		fmt.Println("yamlFile.Get error: #%v ", err)
 	}

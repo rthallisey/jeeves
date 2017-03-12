@@ -18,14 +18,25 @@ import (
 	"fmt"
 
 	"github.com/jeeves/pkg/build"
+	"github.com/jeeves/pkg/render"
+	"github.com/jeeves/pkg/yamlData"
 )
 
 func Run() *int {
-	job := build.NewBuild()
+	input := new(yamlData.YamlData)
+	yamlData.ReadYaml("/home/rhallisey/src/github.com/jeeves/examples/heal.yaml", input)
+
+	r := &render.RenderData{Data: input}
+	r.RenderTemplates()
+
+	client, err := build.DockerClient()
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	for {
 		fmt.Println("building image")
-		job.BuildContainer()
+		build.DockerBuild(client)
 		i := new(int)
 		return i
 	}
